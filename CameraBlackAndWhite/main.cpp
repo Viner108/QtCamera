@@ -56,6 +56,7 @@ public slots:
     }
 
     void processFrame(const QVideoFrame &frame) {
+        qDebug() << "Entered processFrame";
         if (!processingEnabled) return;
 
         frameCount++;
