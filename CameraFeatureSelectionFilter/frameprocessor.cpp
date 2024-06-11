@@ -107,6 +107,9 @@ void FrameProcessor::processFrame(const QVideoFrame &frame) {
         return;
     }
 
+    // Переворачиваем изображение по вертикали
+    image = image.mirrored(false, true);
+
     QOpenGLTexture texture(QOpenGLTexture::Target2D);
     texture.setData(image);
 
@@ -124,6 +127,8 @@ void FrameProcessor::processFrame(const QVideoFrame &frame) {
 
     texture.bind();
     program->setUniformValue("image", 0);
+    program->setUniformValue("width", float(width));
+    program->setUniformValue("height", float(height));
 
     glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
 
@@ -132,6 +137,6 @@ void FrameProcessor::processFrame(const QVideoFrame &frame) {
     program->release();
     fbo.release();
 
-    QImage result = fbo.toImage();
+    QImage result = fbo.toImage().mirrored(false, true); // Переворачиваем обратно для корректного отображения в QLabel
     emit frameProcessed(result);
 }
