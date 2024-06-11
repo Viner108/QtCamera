@@ -1,11 +1,98 @@
 #include "frameprocessor.h"
+#include <QOpenGLFunctions_3_3_Core>
+#include <QOpenGLShaderProgram>
+#include <QOpenGLTexture>
+#include <QOpenGLFramebufferObject>
 #include <QImage>
 #include <cmath>
 #include <QDebug>
+#include <QFile>
+#include <QSurfaceFormat>
 
-FrameProcessor::FrameProcessor(QObject *parent) : QObject(parent) {}
+FrameProcessor::FrameProcessor(QObject *parent) : QObject(parent), initialized(false), context(nullptr), surface(nullptr) {}
+
+FrameProcessor::~FrameProcessor() {
+    delete surface;
+    delete context;
+}
+
+void FrameProcessor::initializeOpenGL() {
+    if (!context) {
+        context = new QOpenGLContext(this);
+        QSurfaceFormat format;
+        format.setVersion(3, 3);
+        format.setProfile(QSurfaceFormat::CoreProfile);
+        context->setFormat(format);
+        context->create();
+
+        surface = new QOffscreenSurface();
+        surface->setFormat(context->format());
+        surface->create();
+    }
+
+    context->makeCurrent(surface);
+    initializeOpenGLFunctions();
+
+    // Загрузка шейдеров из ресурсов
+    QFile vertexFile(":/qresource/vertex_shader.glsl");
+    QFile fragmentFile(":/qresource/sobel_fragment_shader.glsl");
+
+    if (!vertexFile.open(QIODevice::ReadOnly) || !fragmentFile.open(QIODevice::ReadOnly)) {
+        qWarning() << "Failed to load shader files";
+        return;
+    }
+
+    QByteArray vertexShaderSource = vertexFile.readAll();
+    QByteArray fragmentShaderSource = fragmentFile.readAll();
+
+    program = new QOpenGLShaderProgram();
+    program->addShaderFromSourceCode(QOpenGLShader::Vertex, vertexShaderSource);
+    program->addShaderFromSourceCode(QOpenGLShader::Fragment, fragmentShaderSource);
+    program->link();
+
+    GLfloat vertices[] = {
+        // positions    // texture coords
+        1.0f,  1.0f,   1.0f, 1.0f,
+        -1.0f,  1.0f,   0.0f, 1.0f,
+        -1.0f, -1.0f,   0.0f, 0.0f,
+        1.0f, -1.0f,   1.0f, 0.0f,
+    };
+
+    GLuint indices[] = {
+        0, 1, 2,
+        2, 3, 0
+    };
+
+    glGenVertexArrays(1, &VAO);
+    glGenBuffers(1, &VBO);
+    glGenBuffers(1, &EBO);
+
+    glBindVertexArray(VAO);
+
+    glBindBuffer(GL_ARRAY_BUFFER, VBO);
+    glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
+
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, EBO);
+    glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(indices), indices, GL_STATIC_DRAW);
+
+    glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(float), (void*)0);
+    glEnableVertexAttribArray(0);
+    glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(float), (void*)(2 * sizeof(float)));
+    glEnableVertexAttribArray(1);
+
+    glBindBuffer(GL_ARRAY_BUFFER, 0);
+    glBindVertexArray(0);
+
+    initialized = true;
+}
 
 void FrameProcessor::processFrame(const QVideoFrame &frame) {
+    if (!initialized) {
+        initializeOpenGL();
+    }
+
+    context->makeCurrent(surface);
+
     QVideoFrame cloneFrame(frame);
     if (!cloneFrame.map(QVideoFrame::ReadOnly)) {
         qWarning() << "Failed to map frame";
@@ -20,20 +107,31 @@ void FrameProcessor::processFrame(const QVideoFrame &frame) {
         return;
     }
 
-    QImage grayImage = image.convertToFormat(QImage::Format_Grayscale8);
-    edgeImage = QImage(grayImage.size(), QImage::Format_Grayscale8);
+    QOpenGLTexture texture(QOpenGLTexture::Target2D);
+    texture.setData(image);
 
-    for (int y = 1; y < grayImage.height() - 1; ++y) {
-        for (int x = 1; x < grayImage.width() - 1; ++x) {
-            int gx = -grayImage.pixelColor(x - 1, y - 1).value() - 2 * grayImage.pixelColor(x - 1, y).value() - grayImage.pixelColor(x - 1, y + 1).value()
-                     + grayImage.pixelColor(x + 1, y - 1).value() + 2 * grayImage.pixelColor(x + 1, y).value() + grayImage.pixelColor(x + 1, y + 1).value();
-            int gy = -grayImage.pixelColor(x - 1, y - 1).value() - 2 * grayImage.pixelColor(x, y - 1).value() - grayImage.pixelColor(x + 1, y - 1).value()
-                     + grayImage.pixelColor(x - 1, y + 1).value() + 2 * grayImage.pixelColor(x, y + 1).value() + grayImage.pixelColor(x + 1, y + 1).value();
+    int width = image.width();
+    int height = image.height();
 
-            int g = qBound(0, int(std::sqrt(gx * gx + gy * gy)), 255);
-            edgeImage.setPixel(x, y, qRgb(g, g, g));
-        }
-    }
+    QOpenGLFramebufferObject fbo(width, height, QOpenGLFramebufferObject::CombinedDepthStencil);
 
-    emit frameProcessed(edgeImage);
+    fbo.bind();
+    glViewport(0, 0, width, height);
+    glClear(GL_COLOR_BUFFER_BIT);
+
+    program->bind();
+    glBindVertexArray(VAO);
+
+    texture.bind();
+    program->setUniformValue("image", 0);
+
+    glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
+
+    texture.release();
+    glBindVertexArray(0);
+    program->release();
+    fbo.release();
+
+    QImage result = fbo.toImage();
+    emit frameProcessed(result);
 }

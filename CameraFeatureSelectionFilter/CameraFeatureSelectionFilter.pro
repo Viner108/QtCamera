@@ -1,4 +1,4 @@
-QT += core gui multimedia multimediawidgets widgets
+QT += core gui multimedia multimediawidgets widgets opengl
 
 greaterThan(QT_MAJOR_VERSION, 4): QT += widgets
 
@@ -19,6 +19,9 @@ HEADERS += \
 
 FORMS += \
     mainwindow.ui
+
+RESOURCES += shaders.qrc \
+    shaders.qrc
 
 # Default rules for deployment.
 qnx: target.path = /tmp/$${TARGET}/bin

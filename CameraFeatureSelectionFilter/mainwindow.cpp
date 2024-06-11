@@ -26,7 +26,7 @@ MainWindow::MainWindow(QWidget *parent) :
 
     // Создаем вертикальный макет и добавляем videoWidget и кнопку
     QVBoxLayout *layout = new QVBoxLayout();
-   // layout->addWidget(videoWidget);
+    layout->addWidget(videoWidget);
 
     // Метка для отображения обработанных кадров
     label = new QLabel(this);
@@ -60,15 +60,14 @@ MainWindow::MainWindow(QWidget *parent) :
     qDebug() << "Camera started";
 
     // Создаем фоновый поток для обработки видеокадров
-    frameProcessor = new FrameProcessor();
-    processingThread = new QThread(this);
-    frameProcessor->moveToThread(processingThread);
-
-    connect(processingThread, &QThread::finished, frameProcessor, &QObject::deleteLater);
-    connect(this, &MainWindow::processFrameInBackground, frameProcessor, &FrameProcessor::processFrame);
-    connect(frameProcessor, &FrameProcessor::frameProcessed, this, &MainWindow::onFrameProcessed);
-
+    processingThread = new FrameProcessorThread(this);
     processingThread->start();
+
+    // Подождем, пока поток не будет готов
+    QMetaObject::invokeMethod(this, [this]() {
+            connect(this, &MainWindow::processFrameInBackground, processingThread->processor, &FrameProcessor::processFrame);
+            connect(processingThread->processor, &FrameProcessor::frameProcessed, this, &MainWindow::onFrameProcessed);
+        }, Qt::QueuedConnection);
 }
 
 MainWindow::~MainWindow() {
@@ -92,13 +91,12 @@ void MainWindow::processFrame(const QVideoFrame &frame) {
 void MainWindow::onFrameProcessed(const QImage &image) {
     edgeImage = image;
     label->setPixmap(QPixmap::fromImage(edgeImage).scaled(label->size(), Qt::KeepAspectRatio));
-    qDebug() << "Edge image updated";
 }
 
 void MainWindow::saveImage() {
     // Сохранение изображения в файл при нажатии кнопки
     if (!edgeImage.isNull()) {
-        QFile file("D:/work/projects/qt/QtCamera/edge_image.png");
+        QFile file("/mnt/data/edge_image.png");
         if (file.open(QIODevice::WriteOnly)) {
             if (!edgeImage.save(&file, "PNG")) {
                 qWarning() << "Failed to save image";

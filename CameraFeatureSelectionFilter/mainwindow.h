@@ -41,8 +41,7 @@ private:
     QPushButton *saveButton;
     QPushButton *startButton;
     bool processingEnabled;
-    QThread *processingThread;
-    FrameProcessor *frameProcessor;
+    FrameProcessorThread *processingThread;
 };
 
 #endif // MAINWINDOW_H
