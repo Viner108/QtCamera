@@ -4,16 +4,10 @@ in vec2 TexCoord;
 uniform sampler2D image;
 uniform float width; // ширина изображения
 uniform float height; // высота изображения
-uniform float dir;
 
 void main() {
     vec2 uv = TexCoord;
-    float gradient;
-    if(dir == 1){
-        gradient = uv.x; // использование x-координаты как градиент от 0 до 1
-    }else{
-        gradient = 1.0 - uv.x; // использование 1 - x-координаты как градиент от 1 до 0
-    }
+    float gradient = 1.0 - uv.x; // использование 1 - x-координаты как градиент от 1 до 0
 
     float kernelX[9] = float[9](-1, 0, 1, -2, 0, 2, -1, 0, 1);
     float kernelY[9] = float[9]( 1, 2, 1,  0, 0, 0, -1, -2, -1);

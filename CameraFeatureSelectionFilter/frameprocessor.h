@@ -30,6 +30,8 @@ private:
     GLuint VAO, VBO, EBO;
     QOpenGLContext *context;
     QOffscreenSurface *surface;
+    float count = 0;
+    int k = 1;
 };
 
 class FrameProcessorThread : public QThread {
