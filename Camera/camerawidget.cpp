@@ -1,6 +1,6 @@
 #include "camerawidget.h"
 
-CameraWidget :: CameraWidget(QWidget *parent) : QWidget(parent) {
+CameraWidget::CameraWidget(QWidget *parent) : QWidget(parent) {
 
     QVBoxLayout *layout = new QVBoxLayout(this);
 
